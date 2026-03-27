@@ -21,14 +21,11 @@ DEFAULT_USER_ID = "me"
 
 # Gmail API scopes
 GMAIL_SCOPES = [
-    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.modify",
     "https://www.googleapis.com/auth/gmail.send",
     "https://www.googleapis.com/auth/gmail.compose",
     "https://www.googleapis.com/auth/gmail.labels",
 ]
-
-# For simpler testing
-GMAIL_MODIFY_SCOPE = ["https://www.googleapis.com/auth/gmail.modify"]
 
 # Type alias for the Gmail service
 GmailService = Resource
@@ -489,7 +486,12 @@ def send_draft(service: GmailService, draft_id: str, user_id: str = DEFAULT_USER
 
 
 def create_label(
-    service: GmailService, name: str, user_id: str = DEFAULT_USER_ID, label_type: str = "user"
+    service: GmailService,
+    name: str,
+    user_id: str = DEFAULT_USER_ID,
+    label_type: str = "user",
+    label_list_visibility: str = "labelShow",
+    message_list_visibility: str = "show",
 ) -> Dict[str, Any]:
     """
     Create a new label.
@@ -499,14 +501,16 @@ def create_label(
         name: Label name
         user_id: Gmail user ID (default: 'me')
         label_type: Label type (default: 'user')
+        label_list_visibility: Visibility in label list (default: 'labelShow')
+        message_list_visibility: Visibility in message list (default: 'show')
 
     Returns:
         Created label object
     """
     label_body = {
         "name": name,
-        "labelListVisibility": "labelShow",
-        "messageListVisibility": "show",
+        "labelListVisibility": label_list_visibility,
+        "messageListVisibility": message_list_visibility,
         "type": label_type,
     }
     return service.users().labels().create(userId=user_id, body=label_body).execute()

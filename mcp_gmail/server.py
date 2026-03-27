@@ -13,7 +13,9 @@ from mcp.server.fastmcp import FastMCP
 
 from mcp_gmail.config import settings
 from mcp_gmail.gmail import (
+    batch_modify_messages_labels,
     create_draft,
+    create_label,
     get_gmail_service,
     get_headers_dict,
     get_labels,
@@ -460,3 +462,150 @@ def get_emails(message_ids: list[str]) -> str:
             result += f"Error: {error}\n"
 
     return result
+
+
+@mcp.tool()
+def gmail_modify_labels(
+    message_ids: list[str],
+    add_label_ids: Optional[list[str]] = None,
+    remove_label_ids: Optional[list[str]] = None,
+) -> str:
+    """
+    Add or remove labels on one or more messages. Handles archive (remove INBOX),
+    mark read (remove UNREAD), apply custom labels, etc.
+
+    Args:
+        message_ids: List of Gmail message IDs to modify
+        add_label_ids: Label IDs to add (e.g. ["STARRED", "Label_123"])
+        remove_label_ids: Label IDs to remove (e.g. ["UNREAD", "INBOX"])
+
+    Returns:
+        Confirmation with details of modifications
+    """
+    if not message_ids:
+        return "Error: No message IDs provided."
+
+    add_ids = add_label_ids or []
+    remove_ids = remove_label_ids or []
+
+    if not add_ids and not remove_ids:
+        return "Error: Must specify at least one label to add or remove."
+
+    results = []
+    errors = []
+
+    for msg_id in message_ids:
+        try:
+            modified = modify_message_labels(
+                service,
+                user_id=settings.user_id,
+                message_id=msg_id,
+                add_labels=add_ids,
+                remove_labels=remove_ids,
+            )
+            headers = get_headers_dict(modified)
+            subject = headers.get("Subject", "No Subject")
+            results.append(f"  {msg_id} — {subject}")
+        except Exception as e:
+            errors.append(f"  {msg_id} — Error: {e}")
+
+    output = f"Modified {len(results)} of {len(message_ids)} messages.\n"
+    if add_ids:
+        output += f"Added labels: {', '.join(add_ids)}\n"
+    if remove_ids:
+        output += f"Removed labels: {', '.join(remove_ids)}\n"
+    output += "\nSucceeded:\n" + "\n".join(results) if results else ""
+    if errors:
+        output += "\n\nFailed:\n" + "\n".join(errors)
+
+    return output
+
+
+@mcp.tool()
+def gmail_batch_modify(
+    message_ids: list[str],
+    add_label_ids: Optional[list[str]] = None,
+    remove_label_ids: Optional[list[str]] = None,
+) -> str:
+    """
+    Bulk modify labels on up to 1000 messages using Gmail's batchModify endpoint.
+    Use this for bulk operations like archiving all emails matching a search.
+
+    Args:
+        message_ids: List of Gmail message IDs (up to 1000)
+        add_label_ids: Label IDs to add (e.g. ["STARRED"])
+        remove_label_ids: Label IDs to remove (e.g. ["UNREAD", "INBOX"])
+
+    Returns:
+        Confirmation of batch operation
+    """
+    if not message_ids:
+        return "Error: No message IDs provided."
+
+    if len(message_ids) > 1000:
+        return f"Error: Maximum 1000 messages per batch. Got {len(message_ids)}."
+
+    add_ids = add_label_ids or []
+    remove_ids = remove_label_ids or []
+
+    if not add_ids and not remove_ids:
+        return "Error: Must specify at least one label to add or remove."
+
+    try:
+        batch_modify_messages_labels(
+            service,
+            user_id=settings.user_id,
+            message_ids=message_ids,
+            add_labels=add_ids,
+            remove_labels=remove_ids,
+        )
+    except Exception as e:
+        return f"Batch modify failed: {e}"
+
+    output = f"Batch modified {len(message_ids)} messages.\n"
+    if add_ids:
+        output += f"Added labels: {', '.join(add_ids)}\n"
+    if remove_ids:
+        output += f"Removed labels: {', '.join(remove_ids)}\n"
+
+    return output
+
+
+@mcp.tool()
+def gmail_create_label(
+    name: str,
+    label_list_visibility: Optional[str] = "labelShow",
+    message_list_visibility: Optional[str] = "show",
+) -> str:
+    """
+    Create a new Gmail label.
+
+    Args:
+        name: Name of the label to create
+        label_list_visibility: Visibility in label list — "labelShow", "labelShowIfUnread", or "labelHide"
+        message_list_visibility: Visibility in message list — "show" or "hide"
+
+    Returns:
+        Confirmation with created label details
+    """
+    try:
+        label = create_label(
+            service,
+            name=name,
+            user_id=settings.user_id,
+            label_list_visibility=label_list_visibility or "labelShow",
+            message_list_visibility=message_list_visibility or "show",
+        )
+
+        label_id = label.get("id", "unknown")
+        label_name = label.get("name", name)
+
+        return f"""
+Label created:
+  ID: {label_id}
+  Name: {label_name}
+  Label List Visibility: {label_list_visibility}
+  Message List Visibility: {message_list_visibility}
+"""
+    except Exception as e:
+        return f"Failed to create label '{name}': {e}"
