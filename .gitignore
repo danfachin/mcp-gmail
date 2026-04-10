@@ -44,3 +44,10 @@ env/
 # OS specific files
 .DS_Store
 Thumbs.db
+
+# Claude Code
+.claude/settings.local.json
+.claude/wip-state/
+.claude/wip-ack/
+.claude/plans/
+.claude/worktrees/
